@@ -124,7 +124,10 @@ Output:
     "crop_pct": 0.9,
     "interpolation": "bicubic"
 }
-// Without update
+```
+
+Without update:
+```json
 {
     "model": "vit_base_patch16_224",
     "top1": 51.154,
