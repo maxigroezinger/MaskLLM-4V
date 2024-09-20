@@ -13,7 +13,7 @@ Re-implementation of "MaskLLM: Learnable Semi-structured Sparsity for Large Lang
 |SparseGPT| 2:4 | :heavy_check_mark: | 74.968 |
 |SparseGPT w/o Update| 2:4 | - | 51.154 |
 ||
-| **MaskLLM-4V** | 2:4 | - |  |
+| **MaskLLM-4V** | **2:4** | - |  |
 
 
 
