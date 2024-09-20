@@ -160,8 +160,9 @@ parser.add_argument('--valid-labels', default='', type=str, metavar='FILENAME',
 parser.add_argument('--retry', default=False, action='store_true',
                     help='Enable batch size decay & retry for single model validation')
 
-parser.add_argument('--sparse', default=False, action='store_true',
-                    help='enable sparse mode')
+parser.add_argument('--sparsity-mode', default='dense', type=str, choices=['dense', 'sparse', 'maskllm'],
+                    help='Sparsity mode (default: dense)')
+parser.add_argument("--no-strict", action='store_true', default=False)
 
 
 def validate(args):
@@ -220,13 +221,17 @@ def validate(args):
         assert hasattr(model, 'num_classes'), 'Model must have `num_classes` attr if not set on cmd line/config.'
         args.num_classes = model.num_classes
 
-    if args.sparse:
+    if args.sparsity_mode == 'sparse':
         import sparsity
-        model = sparsity.utils.replace_linear_with_(model, sparsity.sparse_linear.SparseLinear, exclude=[model.head])
+        model = sparsity.utils.replace_linear_with_(model, sparsity.sparse_linear.SparseLinear, exclude=[model.get_classifier()])
         print(f"{args.model} converted to sparse model")
+    elif args.sparsity_mode == 'maskllm':
+        import sparsity
+        model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.GumbelLinear, exclude=[model.get_classifier()])
+        print(f"{args.model} converted to maskllm model")
 
     if args.checkpoint:
-        load_checkpoint(model, args.checkpoint, args.use_ema)
+        load_checkpoint(model, args.checkpoint, args.use_ema, strict=not args.no_strict)
 
     if args.reparam:
         model = reparameterize_model(model)

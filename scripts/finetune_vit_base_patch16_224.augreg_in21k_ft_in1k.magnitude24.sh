@@ -1,0 +1,23 @@
+torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
+    --model vit_base_patch16_224 \
+    --sparsity-mode sparse \
+    --sparse-checkpoint output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt \
+    -b 128 \
+    --opt adamw \
+    --lr 1e-4 \
+    --weight-decay 0.05 \
+    --epochs 10 \
+    --warmup-epochs 0 \
+    --mixup 0.8 \
+    --cutmix 1.0 \
+    --sched cosine \
+    --smoothing 0.1 \
+    --drop-path 0.1 \
+    --aa rand-m9-mstd0.5 \
+    --remode pixel --reprob 0.25 \
+    --amp \
+    --crop-pct 0.875 \
+    --mean 0.485 0.456 0.406 \
+    --std 0.229 0.224 0.225 \
+    --output output/finetune_vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt \
+    --log-wandb \

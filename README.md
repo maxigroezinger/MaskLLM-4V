@@ -19,10 +19,22 @@ Re-implementation of "MaskLLM: Learnable Semi-structured Sparsity for Large Lang
 
 ## 2. MaskLLM for Vision Transformers
 
+#### Generate Mask Prior
 
+First, we generate prior masks using magnitude pruning. This prior mask will hugely accelerate the convergence speed of the MaskLLM.
+```bash 
+python oneshot_pruning_timm.py  --pruner magnitude --save-model output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt
+```
 
+#### Train MaskLLM based on the Magnitude Prior
+```bash
+bash scripts/maskllm_vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.sh
+```
 
-
+#### Eval
+```bash
+python timm_validate.py --model vit_base_patch16_224 --checkpoint output/maskllm/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.maskllm.pt --sparsity-mode maskllm
+```
 
 ## 3. Oneshot Pruning
 
@@ -30,10 +42,10 @@ Re-implementation of "MaskLLM: Learnable Semi-structured Sparsity for Large Lang
 No pruning will be perfomed, but additional .mask will be created for the model.
 ```bash
 # Pruning (Dummy for Dense)
-python oneshot_pruning_timm.py  --pruner dense --save-model outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.dense.pt
+python oneshot_pruning_timm.py  --pruner dense --save-model output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.dense.pt
 
 # Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.dense.pt --sparse
+python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.dense.pt --sparsity-mode sparse
 ```
 
 Output:
@@ -56,10 +68,10 @@ Output:
 
 ```bash
 # Pruning
-python oneshot_pruning_timm.py  --pruner magnitude --save-model outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt
+python oneshot_pruning_timm.py  --pruner magnitude --save-model output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt
 
 # Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt --sparse
+python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.magnitude24.pt --sparsity-mode sparse
 ```
 
 Output:
@@ -80,10 +92,10 @@ Output:
 ### Wanda
 ```bash
 # Pruning
-python oneshot_pruning_timm.py  --pruner wanda --save-model outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.wanda24.pt
+python oneshot_pruning_timm.py  --pruner wanda --save-model output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.wanda24.pt
 
 # Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.wanda24.pt --sparse
+python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.wanda24.pt --sparsity-mode sparse
 ```
 
 Ouput:
@@ -103,13 +115,13 @@ Ouput:
 ### SparseGPT
 ```bash
 # Pruning
-python oneshot_pruning_timm.py  --pruner sparsegpt --save-model outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.sparsegpt24.pt
+python oneshot_pruning_timm.py  --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.sparsegpt24.pt
 
 # SparseGPT without weight update
-python oneshot_pruning_timm.py  --pruner sparsegpt --save-model outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.sparsegpt24.pt --disable-update
+python oneshot_pruning_timm.py  --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.sparsegpt24.pt --disable-update
 
 # Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint outputs/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.sparsegpt24.pt --sparse
+python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg_in21k_ft_in1k.sparsegpt24.pt --sparsity-mode sparse
 ```
 
 Output:
