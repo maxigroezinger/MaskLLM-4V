@@ -5,14 +5,14 @@ Re-implementation of "MaskLLM: Learnable Semi-structured Sparsity for Large Lang
 
 ### [ViT-B/16 (Augreg_in21k_ft_in1k, 224x224)](https://huggingface.co/timm/vit_base_patch16_224.augreg_in21k_ft_in1k)
 
-|Method|Weight Update| Top-1 Acc.|
-|---|:---:|:---:|
-|Dense ViT-B/16 | - | 84.532 |
-|Magnitude| - | 38.248 |
-|Wanda| - | 55.826 |
-|SparseGPT| :heavy_check_mark: | 74.968 |
-|SparseGPT w/o Update| - | 51.154 |
-| MaskLLM-4V | - |  |
+|Method|Sparse Pattern|Weight Update| Top-1 Acc.|
+|---|:---:|:---:|:---:|
+|Dense ViT-B/16 | 2:4 | - | 84.532 |
+|Magnitude| 2:4 | - | 38.248 |
+|Wanda| 2:4 | - | 55.826 |
+|SparseGPT| 2:4 | :heavy_check_mark: | 74.968 |
+|SparseGPT w/o Update| 2:4 | - | 51.154 |
+| MaskLLM-4V | 2:4 | - |  |
 
 
 
