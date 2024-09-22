@@ -51,12 +51,12 @@ class GumbelLinear(nn.Linear):
             return F.linear(x, self.mask * self.weight, self.bias)
 
     def load_mask_prior(self, prior_strength=3):
-        for name, param in self.named_parameters():
-            with torch.no_grad():
-                sparsity = (self.mask==0).sum().item() / self.mask.numel()
-                # rank 0
-                if torch.distributed.get_rank() == 0:
-                    print(f"initializing {name} with prior (strength={prior_strength}), Prior Sparsity: {sparsity}")
-                # prior will be the inner product the different candidates to the prior mask
-                priors = (self._mask_options.unsqueeze(0) * self.mask.view(-1, 1, 4)).sum(dim=2) # (1, Candidate Masks, M) * (Blocks, 1, M) => Blocks x Candidate Masks
-                self.gate.data += (priors-self.N//2) * self.gate.std() * prior_strength
+        with torch.no_grad():
+            sparsity = (self.mask==0).sum().item() / self.mask.numel()
+            # rank 0
+            if torch.distributed.get_rank() == 0:
+                print(f"initializing with prior (strength={prior_strength}), Prior Sparsity: {sparsity}")
+                print(f"mean: {self.gate.mean().item()}, std: {self.gate.std().item()}, max: {self.gate.max().item()}, min: {self.gate.min().item()}")
+            # prior will be the inner product the different candidates to the prior mask
+            priors = (self._mask_options.unsqueeze(0) * self.mask.view(-1, 1, 4)).sum(dim=2) # (1, Candidate Masks, M) * (Blocks, 1, M) => Blocks x Candidate Masks
+            self.gate.data += (priors-self.N//2) * self.gate.std() * prior_strength

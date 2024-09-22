@@ -6,7 +6,7 @@ torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
     -b 128 \
     --opt adamw \
     --lr 1e-3 \
-    --weight-decay 0.05 \
+    --weight-decay 0.01 \
     --epochs 20 \
     --warmup-epochs 0 \
     --mixup 0.8 \
@@ -20,12 +20,11 @@ torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
     --crop-pct 0.9 \
     --mean 0.5 0.5 0.5 \
     --std 0.5 0.5 0.5 \
-    --output output/maskllm_vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24_layer_decay \
-    --scaling-range 1e1 1e2 \
+    --output output/maskllm_vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24 \
+    --scaling-range 1e2 5e2 \
     --tau-range 4 0.05 \
     --log-wandb \
-    --layer-decay 0.7 \
-    --sparse-weight-reg 1e-5 \
+    --sparse-weight-reg 1e-6 \
     --clip-grad 2.0 \
     --min-lr 1e-4 \
     --sched-on-updates \

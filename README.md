@@ -34,7 +34,7 @@ Unofficial re-implementation of the paper "MaskLLM: Learnable Semi-structured Sp
 |Wanda| 2:4 | - | 67.38 |
 |SparseGPT| 2:4 | :heavy_check_mark: | 79.75 |
 |SparseGPT w/o Update| 2:4 | - | 62.86 |
-| **MaskLLM-4V** | **2:4** | - |  |
+| **MaskLLM-4V** | **2:4** | - | 83.52 |
 
 
 ### 1. MaskLLM

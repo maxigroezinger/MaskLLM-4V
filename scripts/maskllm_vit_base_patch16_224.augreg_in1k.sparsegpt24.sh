@@ -21,7 +21,7 @@ torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
     --mean 0.5 0.5 0.5 \
     --std 0.5 0.5 0.5 \
     --output output/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24 \
-    --scaling-range 1e1 1e2 \
+    --scaling-range 1e2 5e2 \
     --tau-range 4 0.05 \
     --log-wandb \
     --sparse-weight-reg 1e-5 \
