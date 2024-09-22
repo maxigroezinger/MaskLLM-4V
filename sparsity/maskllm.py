@@ -30,7 +30,7 @@ class GumbelLinear(nn.Linear):
         self.M = M 
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.in_features}, {self.out_features}, bias={self.bias is not None}, N={self._mask_options.size(1)}, M={self._mask_options.size(0)}, tau={self.tau}, scaling={self.scaling}), hard={self.hard})"
+        return f"{self.__class__.__name__}({self.in_features}, {self.out_features}, bias={self.bias is not None}, N={self.N}, M={self.M}, tau={self.tau}, scaling={self.scaling}, hard={self.hard})"
 
     def sparse_weight_reg(self):
         return self._sparse_weight_reg
@@ -54,7 +54,9 @@ class GumbelLinear(nn.Linear):
         for name, param in self.named_parameters():
             with torch.no_grad():
                 sparsity = (self.mask==0).sum().item() / self.mask.numel()
-                print(f"initializing mask with prior (strength={prior_strength}) Prior Sparsity: {sparsity}")
+                # rank 0
+                if torch.distributed.get_rank() == 0:
+                    print(f"initializing {name} with prior (strength={prior_strength}), Prior Sparsity: {sparsity}")
                 # prior will be the inner product the different candidates to the prior mask
                 priors = (self._mask_options.unsqueeze(0) * self.mask.view(-1, 1, 4)).sum(dim=2) # (1, Candidate Masks, M) * (Blocks, 1, M) => Blocks x Candidate Masks
                 self.gate.data += (priors-self.N//2) * self.gate.std() * prior_strength

@@ -400,9 +400,10 @@ group.add_argument('--sparse-checkpoint', type=str, default=None)
 group.add_argument('--N', type=int, default=2)
 group.add_argument('--M', type=int, default=4)
 group.add_argument('--hard', action='store_true', default=False)
-group.add_argument('--scaling_range', nargs='+', type=float, default=[1e2, 1e3])
-group.add_argument('--tau_range', nargs='+', type=float, default=[4, 0.05])
+group.add_argument('--scaling-range', nargs='+', type=float, default=[1e1, 1e2])
+group.add_argument('--tau-range', nargs='+', type=float, default=[4, 0.05])
 group.add_argument('--sparse-weight-reg', type=float, default=0)
+group.add_argument('--finetune-classifier', default=False, action='store_true')
 
 def _parse_args():
     # Do we have a config file to parse?
@@ -534,13 +535,25 @@ def main():
             if isinstance(module, sparsity.maskllm.GumbelLinear):
                 module.load_mask_prior(prior_strength=3)
 
-
+    param_group_fn = None
     if args.mask_only:
         print('Mask only mode...')
         for name, param in model.named_parameters():
             if '.gate' not in name:
                 param.requires_grad = False
                 print(f'Freezing {name}')
+    elif args.sparsity_mode == 'maskllm': # for joint training, we use different learning rates for masks and weights
+        def _param_group_fn(model):
+            model_params = []
+            maskllm_params = []
+            for name, param in model.named_parameters():
+                if not param.requires_grad: pass
+                if 'gate' in name:
+                    maskllm_params.append(param)
+                else:
+                    model_params.append(param)
+            return [{'params': model_params}, {'params': maskllm_params, 'lr': args.lr * 10}]
+        param_group_fn = _param_group_fn
 
     if utils.is_primary(args):
         _logger.info(
@@ -603,6 +616,7 @@ def main():
         model,
         **optimizer_kwargs(cfg=args),
         **args.opt_kwargs,
+        param_group_fn=param_group_fn
     )
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
@@ -944,6 +958,10 @@ def main():
                     if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
                         utils.distribute_bn(model_ema, args.world_size, args.dist_bn == 'reduce')
 
+                    for m in model_ema.modules():
+                        if isinstance(m, sparsity.maskllm.GumbelLinear):
+                            m.mask_oudated=True # re-compute mask
+                    
                     ema_eval_metrics = validate(
                         model_ema,
                         loader_eval,

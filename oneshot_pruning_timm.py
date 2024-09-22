@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn 
 import argparse
 from torchvision.transforms.functional import InterpolationMode
-from torchvision import transforms
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 import numpy as np
@@ -187,7 +186,7 @@ def prune_sparsegpt(model, loader, nsamples=128, batch_size=1, device=torch.devi
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default='vit_base_patch16_224.augreg_in21k_ft_in1k')
+    parser.add_argument("--model", type=str, default='vit_base_patch16_224.augreg_in1k')
     parser.add_argument("--data-path", type=str, default='data/imagenet')
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
@@ -199,7 +198,7 @@ if __name__=='__main__':
     parser.add_argument("--image-size", type=int, default=224)
     parser.add_argument("--N", type=int, default=2)
     parser.add_argument("--M", type=int, default=4)
-    parser.add_argument("--disable-update", action='store_true', default=False)
+    parser.add_argument("--enable-update", action='store_true', default=False)
     args = parser.parse_args()
 
     # Setup PyTorch:
@@ -221,15 +220,10 @@ if __name__=='__main__':
     model.eval() 
     model.to(device)
 
-    transform = transforms.Compose([
-        transforms.Resize(256, interpolation=InterpolationMode.BICUBIC, antialias=True),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225),
-        )])
-    dataset = ImageFolder(os.path.join(args.data_path, 'val'), transform=transform)
+    data_config = timm.data.resolve_model_data_config(model)
+    transforms = timm.data.create_transform(**data_config, is_training=False)
+    print(transforms)
+    dataset = ImageFolder(os.path.join(args.data_path, 'val'), transform=transforms)
     loader = DataLoader(
         dataset,
         batch_size=1,
@@ -244,7 +238,7 @@ if __name__=='__main__':
     elif args.pruner == 'wanda':
         prune_wanda(model, loader=loader, nsamples=args.nsamples, batch_size=1, device=device, prune_n=args.N, prune_m=args.M)
     elif args.pruner == 'sparsegpt':
-        prune_sparsegpt(model, loader=loader, nsamples=args.nsamples, batch_size=1, device=device, prune_n=args.N, prune_m=args.M, disable_update=args.disable_update)
+        prune_sparsegpt(model, loader=loader, nsamples=args.nsamples, batch_size=1, device=device, prune_n=args.N, prune_m=args.M, disable_update=not args.enable_update)
     else:
         raise NotImplementedError
 
