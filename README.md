@@ -1,15 +1,17 @@
 # MaskLLM-4V
 This repo contains an unofficial re-implementation of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for Vision Transformers -- ViTs, DiTs, etc.
 
+[[Arxiv]](), [[NVlabs/MaskLLM (Official)]]()
+
 ![maskllm_framework](assets/framework.png)
 ![gumbel_softmax](assets/gumbel_softmax.png)
 
 ## TODO List
 
-- [x] [MaskLLM for ViTs on ImageNet-1k (Classification)](#1-maskllm-for-vits)
-- [x] [Magnitude Pruning, Wanda and SparseGPT for ViTs](#2-magnitude)
-- [ ] [MaskLLM for DiTs on ImageNet-1k (Generation)](#1-maskllm-for-dits)
-- [x] [Magnitude Pruning, Wanda and SparseGPT for DiTs](#2-magnitude)
+- [x] [MaskLLM for ViTs on ImageNet-1k (Classification)](#1-maskllm-for-vision-transformers)
+- [x] [Magnitude Pruning, Wanda and SparseGPT for ViTs](#2-dense---vit)
+- [ ] [MaskLLM for DiTs on ImageNet-1k (Generation)](#1-maskllm-for-diffusion-transformers)
+- [x] [Magnitude Pruning, Wanda and SparseGPT for DiTs](#2-dense---dit)
 - [ ] TensorRT examples
 
 ## Quick Start
@@ -80,7 +82,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint CKPT_PATH --sp
 
 To perform MaskLLM on other models or prior types, pleae change the `--model` and `--checkpoint` arguments. 
 
-### 2. Dense
+### 2. Dense - ViT
 
 <details>
 <summary>Detailed Instructions</summary>
@@ -106,7 +108,7 @@ python timm_validate.py --model vit_base_patch16_224.augreg_in1k  --pretrained
 </details>
 
 
-### 3. Magnitude Pruning
+### 3. Magnitude Pruning - ViT
 <details>
 <summary>Detailed Instructions</summary>
 
@@ -133,7 +135,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 
 </details>
 
-### 4. Wanda
+### 4. Wanda - ViT
 <details>
 <summary>Detailed Instructions</summary>
 
@@ -160,7 +162,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 
 </details>
 
-### 5. SparseGPT
+### 5. SparseGPT - ViT
 
 <details>
 <summary>Detailed Instructions</summary>
@@ -214,7 +216,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 
 ## Results on DiTs (In progress)
 
-### [DiT-XL/2 (256x256)](https://huggingface.co/timm/vit_base_patch16_224.augreg_in1k)
+### [DiT-XL/2 (256x256)](https://github.com/facebookresearch/DiT)
 
 This part is still in progress. Please stay tuned. 
 
@@ -240,31 +242,38 @@ data
 
 TODO
 
+### 2. Dense - DiT
+```bash
+python sample.py --model DiT-XL/2
+```
+<div>
+    <img src="assets/DiT_XL_2_dense.png" width="60%"/>
+</div>
 
-### 2. Magnitude
+### 3. Magnitude Pruning - DiT
 ```bash
 python oneshot_pruning_dit.py --model DiT-XL/2 --pruner magnitude 
 ```
 <div>
-    <img src="assets/magnitude.png" width="60%"/>
+    <img src="assets/DiT_XL_2_magnitude.png" width="60%"/>
 </div>
 
-### 3. Wanda
+### 4. Wanda - DiT
 ```bash
 python oneshot_pruning_dit.py --model DiT-XL/2 --pruner wanda 
 ```
 <div>
-    <img src="assets/wanda.png" width="60%"/>
+    <img src="assets/DiT_XL_2_wanda.png" width="60%"/>
 </div>
 
-### 4. SparseGPT
+### 5. SparseGPT - DiT
 
 #### without weight update
 ```bash
 python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt 
 ```
 <div>
-    <img src="assets/sparsegpt.png" width="60%"/>
+    <img src="assets/DiT_XL_2_sparsegpt.png" width="60%"/>
 </div>
 
 #### with weight update
@@ -272,7 +281,7 @@ python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt
 python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt --enable-update
 ```
 <div>
-    <img src="assets/sparsegpt_updated.png" width="60%"/>
+    <img src="assets/DiT_XL_2_sparsegpt_updated.png" width="60%"/>
 </div>
 
 ## Acknowledgement

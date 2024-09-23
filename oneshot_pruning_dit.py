@@ -346,7 +346,7 @@ if __name__=='__main__':
 
     # Save and display images:
     os.makedirs("output/samples_from_pruned_dits", exist_ok=True)
-    save_image(samples,f"output/samples_from_pruned_dits/{args.pruner}.png", nrow=4, normalize=True, value_range=(-1, 1))
+    save_image(samples,f"output/samples_from_pruned_dits/{args.model.replace('-', '_').replace('/', '_')}_{args.pruner}.png", nrow=4, normalize=True, value_range=(-1, 1))
 
     # Check sparsiy
     for name, m in model.named_modules():
