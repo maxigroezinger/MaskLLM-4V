@@ -1,7 +1,7 @@
 # MaskLLM-4V
 This repo contains an unofficial re-implementation of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for Vision Transformers -- ViTs, DiTs, etc.
 
-[[Arxiv]](), [[NVlabs/MaskLLM (Official)]]()
+:rocket:[[Arxiv]](), :rocket:[[NVlabs/MaskLLM (Official)]]()
 
 ![maskllm_framework](assets/framework.png)
 ![gumbel_softmax](assets/gumbel_softmax.png)
@@ -36,7 +36,7 @@ print(model)
 |SparseGPT| 2:4 | :heavy_check_mark: | 71.52 |
 |SparseGPT w/o Update| 2:4 | - | 59.72 |
 | **MaskLLM-4V (1 Epoch)** | **2:4** | - | **** |
-| **MaskLLM-4V (20 Epochs)** | **2:4** | - | **79.45** |
+| **MaskLLM-4V (20 Epochs)** | **2:4** | - | **79.38** |
 
 *Note: The sparse accuracy can be higher or lower than the dense accuracy. This depends on how difficult the task is. And pruning can be seen as a form of regularization to reduce overfitting.*
 
@@ -60,6 +60,8 @@ data
 
 
 ### 1. MaskLLM for [Vision Transformers](https://arxiv.org/abs/2010.11929)
+
+We train the masks with 4x24GB GPUs. The training of ViT-B/16 requires 22G memory on each GPU, with the batch size of 128.
 
 #### Generate Mask Prior
 

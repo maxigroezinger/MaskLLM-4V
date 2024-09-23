@@ -1,4 +1,4 @@
-torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
+torchrun --nnodes=1 --nproc_per_node=4 --master_port 23432 timm_train.py \
     --model vit_base_patch16_224 \
     --sparsity-mode maskllm \
     --mask-only \
