@@ -20,7 +20,7 @@ torchrun --nnodes=1 --nproc_per_node=4 --master_port 23433 timm_train.py \
     --crop-pct 0.9 \
     --mean 0.5 0.5 0.5 \
     --std 0.5 0.5 0.5 \
-    --output output/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24_v3 \
+    --output output/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24 \
     --scaling-range 1e2 1e2 \
     --tau-range 1 1 \
     --log-wandb \
