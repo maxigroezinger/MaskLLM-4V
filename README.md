@@ -35,10 +35,10 @@ print(model)
 |Wanda| 2:4 | - | 63.28 |
 |SparseGPT| 2:4 | :heavy_check_mark: | 71.52 |
 |SparseGPT w/o Update| 2:4 | - | 59.72 |
-| **MaskLLM-4V (1 Epoch)** | **2:4** | - | **** |
-| **MaskLLM-4V (20 Epochs)** | **2:4** | - | **79.38** |
+| **MaskLLM-4V (1 Epoch)** | **2:4** | - | **76.23** |
+| **MaskLLM-4V (20 Epochs)** | **2:4** | - | **79.46** |
 
-*Note: The sparse accuracy can be higher or lower than the dense accuracy. This depends on how difficult the task is. And pruning can be seen as a form of regularization to reduce overfitting.*
+*Note: MaskLLM learns a seperated mask with frozen network parameters for sparsification. For ViT-B/16, we are able to find a lossless mask through learning*
 
 
 ### 0. Dataset
@@ -72,7 +72,7 @@ python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --prune
 ```
 
 #### Train MaskLLM based on the Magnitude Prior
-We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we enable EMA and train the model for 20 epochs. If you want to reduce the training time, please disable EMA since the EMA requires more training steps to converge.
+We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we train the model with EMA for 20 epochs. If you want to reduce the training time, please disable EMA since like [this script](scripts/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh).
 ```bash
 bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.magnitude24.sh
 ```

@@ -541,7 +541,8 @@ def main():
         for name, param in model.named_parameters():
             if '.gate' not in name:
                 param.requires_grad = False
-                print(f'Freezing {name}')
+                if args.rank==0:
+                    print(f'Freezing {name}')
 
     if utils.is_primary(args):
         _logger.info(
@@ -901,8 +902,8 @@ def main():
 
             if args.sparsity_mode == 'maskllm':
                 # set tau, linearly increasing from tau_range[0] to tau_range[1] over epochs
-                tau = args.tau_range[0] + (args.tau_range[1] - args.tau_range[0]) * epoch / (num_epochs - 1)
-                scaling = args.scaling_range[0] + (args.scaling_range[1] - args.scaling_range[0]) * epoch / (num_epochs - 1)
+                tau = args.tau_range[0] + (args.tau_range[1] - args.tau_range[0]) * epoch / max(num_epochs - 1, 1)
+                scaling = args.scaling_range[0] + (args.scaling_range[1] - args.scaling_range[0]) * epoch / max(num_epochs - 1, 1)
                 for m in model.modules():
                     if isinstance(m, sparsity.maskllm.MaskedLinear):
                         m.tau = tau
