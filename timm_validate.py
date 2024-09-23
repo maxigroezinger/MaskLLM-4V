@@ -223,11 +223,11 @@ def validate(args):
 
     if args.sparsity_mode == 'sparse':
         import sparsity
-        model = sparsity.utils.replace_linear_with_(model, sparsity.sparse_linear.SparseLinear, exclude=[model.get_classifier()])
+        model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinearFrozen, exclude=[model.get_classifier()])
         print(f"{args.model} converted to sparse model")
     elif args.sparsity_mode == 'maskllm':
         import sparsity
-        model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.GumbelLinear, exclude=[model.get_classifier()])
+        model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinear, exclude=[model.get_classifier()])
         print(f"{args.model} converted to maskllm model")
 
     if args.checkpoint:

@@ -214,7 +214,7 @@ if __name__=='__main__':
         state_dict = torch.load(args.ckpt, map_location='cpu')
         model.load_state_dict(state_dict)
     
-    sparsity.utils.replace_linear_with_(model, sparsity.sparse_linear.SparseLinear, exclude=[model.head])
+    sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinearFrozen, exclude=[model.head])
     print(model)
     print(f"[!] Converted {args.model} to sparse model")
     model.eval() 

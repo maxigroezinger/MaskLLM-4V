@@ -20,8 +20,8 @@ torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
     --crop-pct 0.9 \
     --mean 0.5 0.5 0.5 \
     --std 0.5 0.5 0.5 \
-    --output output/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24 \
-    --scaling-range 1e2 5e2 \
+    --output output/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24_v3 \
+    --scaling-range 1e1 1e2 \
     --tau-range 4 0.05 \
     --log-wandb \
     --sparse-weight-reg 1e-5 \
@@ -29,3 +29,4 @@ torchrun --nnodes=1 --nproc_per_node=4 timm_train.py \
     --min-lr 1e-4 \
     --model-ema \
     --model-ema-decay 0.9998 \
+    --prior-strength 3 \

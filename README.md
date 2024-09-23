@@ -1,14 +1,25 @@
 # MaskLLM-4V
-Unofficial re-implementation of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for Vision Transformers -- ViTs, DiTs, etc.
+This repo contains an unofficial re-implementation of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for Vision Transformers -- ViTs, DiTs, etc.
 
 ![maskllm_framework](assets/framework.png)
 ![gumbel_softmax](assets/gumbel_softmax.png)
 
 ## TODO List
 
-- [x] 2:4 Sparsity for Vision Transformers on ImageNet-1k 
-- [] 2:4 Sparsity for Diffusion Transformers on ImageNet-1k
+- [x] [MaskLLM for ViTs on ImageNet-1k (Classification)](#1-maskllm-for-vits)
+- [x] [Magnitude Pruning, Wanda and SparseGPT for ViTs](#2-magnitude)
+- [] [MaskLLM for DiTs on ImageNet-1k (Generation)](#1-maskllm-for-dits)
+- [x] [Magnitude Pruning, Wanda and SparseGPT for DiTs](#2-magnitude)
 - [] TensorRT examples
+
+## Quick Start
+
+To enable MaskLLM on your model, please replace the `nn.Linear` with [`sparsity.maskllm.MaskedLinear`](sparsity/maskllm.py). This can be done easily with the following code:
+```python
+import sparsity
+model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinear, exclude=[model.head], N=2, M=4, hard=False)
+print(model)
+```
 
 ## Results on ViTs
 
@@ -22,22 +33,31 @@ Unofficial re-implementation of the paper "MaskLLM: Learnable Semi-structured Sp
 |Wanda| 2:4 | - | 63.28 |
 |SparseGPT| 2:4 | :heavy_check_mark: | 71.52 |
 |SparseGPT w/o Update| 2:4 | - | 59.72 |
-| **MaskLLM-4V** | **2:4** | - | **79.45** |
+| **MaskLLM-4V (1 Epoch)** | **2:4** | - | **** |
+| **MaskLLM-4V (20 Epochs)** | **2:4** | - | **79.45** |
 
-### [ViT-B/16 (augreg2_in21k_ft_in1k, 224x224)](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
-
-|Method|Sparsity Pattern|Weight Update| Top-1 Acc. (%) |
-|---|:---:|:---:|:---:|
-| ViT-B/16 (in21k_ft_in1k) | Dense | - | 85.10 |
-||
-|Magnitude| 2:4 | - | 53.91 |
-|Wanda| 2:4 | - | 67.38 |
-|SparseGPT| 2:4 | :heavy_check_mark: | 79.75 |
-|SparseGPT w/o Update| 2:4 | - | 62.86 |
-| **MaskLLM-4V** | **2:4** | - | 83.52 |
+*Note: The sparse accuracy can be higher or lower than the dense accuracy. This depends on how difficult the task is. And pruning can be seen as a form of regularization to reduce overfitting.*
 
 
-### 1. MaskLLM
+### 0. Dataset
+Please prepare the ImageNet-1k dataset under `./data/imagenet` directory. The directory structure should be as follows:
+```bash
+data
+├── imagenet
+│   ├── train
+│   │   ├── n01440764
+│   │   ├── n01443537
+│   │   ├── n01484850
+│   │   ├── n01491361
+│   └── val
+│   │   ├── n01440764
+│   │   ├── n01443537
+│   │   ├── n01484850
+│   │   ├── n01491361
+```
+
+
+### 1. MaskLLM for ViTs
 
 #### Generate Mask Prior
 
@@ -48,7 +68,7 @@ python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --prune
 ```
 
 #### Train MaskLLM based on the Magnitude Prior
-We took the hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). 
+We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we enable EMA and train the model for 20 epochs. If you want to reduce the training time, please disable EMA since the EMA requires more training steps to converge.
 ```bash
 bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.magnitude24.sh
 ```
@@ -58,25 +78,15 @@ bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.magnitude24.sh
 python timm_validate.py --model vit_base_patch16_224 --checkpoint CKPT_PATH --sparsity-mode maskllm
 ```
 
-To perform MaskLLM on a different model or prior type, you can change the `--model` and `--checkpoint` arguments. For example, we produce masks for `vit_base_patch16_224.augreg2_in21k_ft_in1k` model with the following commands:
-
-```bash
-# For augreg2_in21k_ft_in1k
-python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k  --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24.pt 
-
-bash scripts/maskllm_vit_base_patch16_224.augreg2_in21k_ft_in1k.magnitude24.sh
-
-python timm_validate.py --model vit_base_patch16_224 --checkpoint CKPT_PATH --sparsity-mode maskllm
-```
+To perform MaskLLM on other models or prior types, pleae change the `--model` and `--checkpoint` arguments. 
 
 ### 2. Dense
 
 <details>
 <summary>Detailed Instructions</summary>
 
-#### ImageNet-1K:
 ```bash
-# ImageNet-1k
+# Eval
 python timm_validate.py --model vit_base_patch16_224.augreg_in1k  --pretrained
 ```
 ```json
@@ -93,24 +103,6 @@ python timm_validate.py --model vit_base_patch16_224.augreg_in1k  --pretrained
 }
 ```
 
-#### ImageNet-21k-ft-1k:
-```bash
-python timm_validate.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k  --pretrained
-```
-```json
-{
-    "model": "vit_base_patch16_224.augreg2_in21k_ft_in1k",
-    "top1": 85.096,
-    "top1_err": 14.904,
-    "top5": 97.53,
-    "top5_err": 2.47,
-    "param_count": 86.57,
-    "img_size": 224,
-    "crop_pct": 0.9,
-    "interpolation": "bicubic"
-}
-```
-
 </details>
 
 
@@ -118,9 +110,8 @@ python timm_validate.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k  --pr
 <details>
 <summary>Detailed Instructions</summary>
 
-#### Magnitude - ImageNet-1K
 ```bash
-# ImageNet-1k
+# Magnitude pruning
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k --pruner magnitude --save-model output/pruned/vit_base_patch16_224.augreg_in1k.magnitude24.pt
 
 # Eval
@@ -140,35 +131,14 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 }
 ```
 
-#### Magnitude - ImageNet-21k-ft-1k
-```bash
-python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k --pruner magnitude --save-model output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.magnitude24.pt
-
-# Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.magnitude24.pt --sparsity-mode sparse
-```
-```json
-{
-    "model": "vit_base_patch16_224",
-    "top1": 53.906,
-    "top1_err": 46.094,
-    "top5": 77.358,
-    "top5_err": 22.642,
-    "param_count": 86.57,
-    "img_size": 224,
-    "crop_pct": 0.9,
-    "interpolation": "bicubic"
-}
-```
-
 </details>
 
 ### 4. Wanda
 <details>
 <summary>Detailed Instructions</summary>
 
-#### Wanda - ImageNet-1K
 ```bash
+# Wanda pruning
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --pruner wanda --save-model output/pruned/vit_base_patch16_224.augreg_in1k.wanda24.pt
 
 # Eval
@@ -188,30 +158,6 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 }
 ```
 
-
-#### Wanda - ImageNet-21k-ft-1k
-```bash
-python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k  --pruner wanda --save-model output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.wanda24.pt
-
-# Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.wanda24.pt --sparsity-mode sparse
-```
-```json
-{
-    "model": "vit_base_patch16_224",
-    "top1": 67.378,
-    "top1_err": 32.622,
-    "top5": 88.7,
-    "top5_err": 11.3,
-    "param_count": 86.57,
-    "img_size": 224,
-    "crop_pct": 0.9,
-    "interpolation": "bicubic"
-}
-```
-
-
-
 </details>
 
 ### 5. SparseGPT
@@ -222,6 +168,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 
 #### SparseGPT - ImageNet-1K without update
 ```bash
+# SparseGPT pruning
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in1k.sparsegpt24.pt
 
 # Eval
@@ -244,6 +191,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 #### SparseGPT - ImageNet-1K with update
 
 ```bash
+# SparseGPT pruning with weight update
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in1k.sparsegpt24_updated.pt --enable-update
 
 # Eval
@@ -262,55 +210,70 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
     "interpolation": "bicubic"
 }
 ```
-
-
-#### SparseGPT - ImageNet-21k-ft-1k without update
-
-```bash
-python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24.pt
-
-# Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24.pt --sparsity-mode sparse
-```
-
-```json
-{
-    "model": "vit_base_patch16_224",
-    "top1": 62.858,
-    "top1_err": 37.142,
-    "top5": 85.4,
-    "top5_err": 14.6,
-    "param_count": 86.57,
-    "img_size": 224,
-    "crop_pct": 0.9,
-    "interpolation": "bicubic"
-}
-```
-
-
-#### SparseGPT - ImageNet-21k-ft-1k with update
-```bash
-python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg2_in21k_ft_in1k --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24_updated.pt --enable-update
-
-# Eval
-python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/vit_base_patch16_224.augreg2_in21k_ft_in1k.sparsegpt24_updated.pt --sparsity-mode sparse
-```
-```json
-{
-    "model": "vit_base_patch16_224",
-    "top1": 79.754,
-    "top1_err": 20.246,
-    "top5": 95.51,
-    "top5_err": 4.49,
-    "param_count": 86.57,
-    "img_size": 224,
-    "crop_pct": 0.9,
-    "interpolation": "bicubic"
-}
-```
-
-
 </details>
+
+## Results on DiTs (In progress)
+
+### [DiT-XL/2 (256x256)](https://huggingface.co/timm/vit_base_patch16_224.augreg_in1k)
+
+This part is still in progress. Please stay tuned. 
+
+### 0. Dataset
+Please prepare the ImageNet-1k dataset under `./data/imagenet` directory. The directory structure should be as follows:
+```bash
+data
+├── imagenet
+│   ├── train
+│   │   ├── n01440764
+│   │   ├── n01443537
+│   │   ├── n01484850
+│   │   ├── n01491361
+│   └── val
+│   │   ├── n01440764
+│   │   ├── n01443537
+│   │   ├── n01484850
+│   │   ├── n01491361
+```
+
+
+### 1. MaskLLM for DiTs
+
+TODO
+
+
+### 2. Magnitude
+```bash
+python oneshot_pruning_dit.py --model DiT-XL/2 --pruner magnitude 
+```
+<div>
+    <img src="assets/magnitude.png" width="60%"/>
+</div>
+
+### 3. Wanda
+```bash
+python oneshot_pruning_dit.py --model DiT-XL/2 --pruner wanda 
+```
+<div>
+    <img src="assets/wanda.png" width="60%"/>
+</div>
+
+### 4. SparseGPT
+
+#### without weight update
+```bash
+python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt 
+```
+<div>
+    <img src="assets/sparsegpt.png" width="60%"/>
+</div>
+
+#### with weight update
+```bash
+python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt --enable-update
+```
+<div>
+    <img src="assets/sparsegpt_updated.png" width="60%"/>
+</div>
 
 ## Acknowledgement
 
@@ -318,8 +281,9 @@ This project is based on the following repositories:
 
 - [NVlabs/MaskLLM]()
 - [huggingface/pytorch-image-models](https://github.com/huggingface/pytorch-image-models)
-- [locuslab/wanda](https://github.com/locuslab/wanda)
 - [IST-DASLab/sparsegpt](https://github.com/IST-DASLab/sparsegpt)
+- [locuslab/wanda](https://github.com/locuslab/wanda)
+
 
 ## BibTeX
 

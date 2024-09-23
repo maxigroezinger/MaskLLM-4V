@@ -404,6 +404,7 @@ group.add_argument('--scaling-range', nargs='+', type=float, default=[1e1, 1e2])
 group.add_argument('--tau-range', nargs='+', type=float, default=[4, 0.05])
 group.add_argument('--sparse-weight-reg', type=float, default=0)
 group.add_argument('--finetune-classifier', default=False, action='store_true')
+group.add_argument('--prior-strength', type=float, default=3)
 
 def _parse_args():
     # Do we have a config file to parse?
@@ -513,12 +514,12 @@ def main():
 
     if args.sparsity_mode == 'sparse':
         import sparsity
-        model = sparsity.utils.replace_linear_with_(model, sparsity.sparse_linear.SparseLinear, exclude=[model.get_classifier()])
+        model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinearFrozen, exclude=[model.get_classifier()])
     elif args.sparsity_mode == 'maskllm':
         import sparsity
         model = sparsity.utils.replace_linear_with_(
             model, 
-            sparsity.maskllm.GumbelLinear, 
+            sparsity.maskllm.MaskedLinear, 
             exclude=[model.get_classifier()],
             N=2, M=4, hard=False)
     
@@ -532,28 +533,15 @@ def main():
 
         # for learnable mask, load the prior
         for name, module in model.named_modules():
-            if isinstance(module, sparsity.maskllm.GumbelLinear):
-                module.load_mask_prior(prior_strength=3)
+            if isinstance(module, sparsity.maskllm.MaskedLinear):
+                module.load_mask_prior(prior_strength=args.prior_strength)
 
-    param_group_fn = None
     if args.mask_only:
         print('Mask only mode...')
         for name, param in model.named_parameters():
             if '.gate' not in name:
                 param.requires_grad = False
                 print(f'Freezing {name}')
-    elif args.sparsity_mode == 'maskllm': # for joint training, we use different learning rates for masks and weights
-        def _param_group_fn(model):
-            model_params = []
-            maskllm_params = []
-            for name, param in model.named_parameters():
-                if not param.requires_grad: pass
-                if 'gate' in name:
-                    maskllm_params.append(param)
-                else:
-                    model_params.append(param)
-            return [{'params': model_params}, {'params': maskllm_params, 'lr': args.lr * 10}]
-        param_group_fn = _param_group_fn
 
     if utils.is_primary(args):
         _logger.info(
@@ -616,7 +604,6 @@ def main():
         model,
         **optimizer_kwargs(cfg=args),
         **args.opt_kwargs,
-        param_group_fn=param_group_fn
     )
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
@@ -917,7 +904,7 @@ def main():
                 tau = args.tau_range[0] + (args.tau_range[1] - args.tau_range[0]) * epoch / (num_epochs - 1)
                 scaling = args.scaling_range[0] + (args.scaling_range[1] - args.scaling_range[0]) * epoch / (num_epochs - 1)
                 for m in model.modules():
-                    if isinstance(m, sparsity.maskllm.GumbelLinear):
+                    if isinstance(m, sparsity.maskllm.MaskedLinear):
                         m.tau = tau
                         m.scaling = scaling
                 _logger.info(f'Epoch {epoch}: tau={tau}, scaling={scaling}')
@@ -959,7 +946,7 @@ def main():
                         utils.distribute_bn(model_ema, args.world_size, args.dist_bn == 'reduce')
 
                     for m in model_ema.modules():
-                        if isinstance(m, sparsity.maskllm.GumbelLinear):
+                        if isinstance(m, sparsity.maskllm.MaskedLinear):
                             m.mask_oudated=True # re-compute mask
                     
                     ema_eval_metrics = validate(
@@ -1080,7 +1067,7 @@ def train_one_epoch(
                 loss = loss_fn(output, target)
                 if args.sparse_weight_reg>0:
                     for m in model.modules():
-                        if isinstance(m, sparsity.maskllm.GumbelLinear):
+                        if isinstance(m, sparsity.maskllm.MaskedLinear):
                             loss += - args.sparse_weight_reg * m.sparse_weight_reg() # maximize magnitude of remaining weights
             if accum_steps > 1:
                 loss /= accum_steps

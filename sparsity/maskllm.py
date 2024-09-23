@@ -14,9 +14,23 @@ def generate_N_M_masks(N, M):
         result[i, torch.tensor(indices)] = 1
     return result
 
-class GumbelLinear(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True, N=2, M=4, gate_init_std=0.02, tau=1, hard=False, scaling=1):
-        super(GumbelLinear, self).__init__(in_features, out_features, bias)
+class MaskedLinearFrozen(nn.Linear):
+    """A linear layer with a fixed mask that is not updated during training."""
+    def __init__(self, in_features, out_features, bias=True):
+        super(MaskedLinearFrozen, self).__init__(in_features, out_features, bias)
+        self.register_buffer('mask', torch.ones(out_features, in_features))
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.in_features}, {self.out_features}, bias={self.bias is not None})"
+
+    def forward(self, x):
+        return F.linear(x, self.mask * self.weight, self.bias)
+
+
+class MaskedLinear(nn.Linear):
+    """A linear layer with a learnable mask that sparsifies the weights."""
+    def __init__(self, in_features, out_features, bias=True, N=2, M=4, gate_init_std=0.2, tau=1, hard=False, scaling=1):
+        super(MaskedLinear, self).__init__(in_features, out_features, bias)
         self._mask_options = generate_N_M_masks(N, M) 
         self.gate = nn.Parameter(torch.empty(
                 self.weight.numel()//M, self._mask_options.size(0), device=self.weight.device, dtype=self.weight.dtype), requires_grad=True)
@@ -53,10 +67,10 @@ class GumbelLinear(nn.Linear):
     def load_mask_prior(self, prior_strength=3):
         with torch.no_grad():
             sparsity = (self.mask==0).sum().item() / self.mask.numel()
-            # rank 0
-            if torch.distributed.get_rank() == 0:
-                print(f"initializing with prior (strength={prior_strength}), Prior Sparsity: {sparsity}")
-                print(f"mean: {self.gate.mean().item()}, std: {self.gate.std().item()}, max: {self.gate.max().item()}, min: {self.gate.min().item()}")
             # prior will be the inner product the different candidates to the prior mask
             priors = (self._mask_options.unsqueeze(0) * self.mask.view(-1, 1, 4)).sum(dim=2) # (1, Candidate Masks, M) * (Blocks, 1, M) => Blocks x Candidate Masks
             self.gate.data += (priors-self.N//2) * self.gate.std() * prior_strength
+
+            if torch.distributed.get_rank() == 0:
+                print(f"initializing with prior (strength={prior_strength}), Prior Sparsity: {sparsity}")
+                print(f"mean: {self.gate.mean().item()}, std: {self.gate.std().item()}, max: {self.gate.max().item()}, min: {self.gate.min().item()}")
