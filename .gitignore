@@ -13,7 +13,12 @@ develop-eggs/
 dist/
 downloads/
 eggs/
+*.zip
+for_boya_2
+pretrained_models
 .eggs/
+README_bak.md
+data
 lib/
 lib64/
 parts/
