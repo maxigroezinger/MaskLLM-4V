@@ -57,7 +57,7 @@ data
 ```
 
 
-### 1. MaskLLM for ViTs
+### 1. MaskLLM for [Vision Transformers](https://arxiv.org/abs/2010.11929)
 
 #### Generate Mask Prior
 
@@ -236,7 +236,7 @@ data
 ```
 
 
-### 1. MaskLLM for DiTs
+### 1. MaskLLM for [Diffusion Transformers](https://arxiv.org/abs/2212.09748)
 
 TODO
 
