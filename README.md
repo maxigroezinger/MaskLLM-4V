@@ -8,9 +8,9 @@ This repo contains an unofficial re-implementation of the paper "MaskLLM: Learna
 
 - [x] [MaskLLM for ViTs on ImageNet-1k (Classification)](#1-maskllm-for-vits)
 - [x] [Magnitude Pruning, Wanda and SparseGPT for ViTs](#2-magnitude)
-- [] [MaskLLM for DiTs on ImageNet-1k (Generation)](#1-maskllm-for-dits)
+- [ ] [MaskLLM for DiTs on ImageNet-1k (Generation)](#1-maskllm-for-dits)
 - [x] [Magnitude Pruning, Wanda and SparseGPT for DiTs](#2-magnitude)
-- [] TensorRT examples
+- [ ] TensorRT examples
 
 ## Quick Start
 
