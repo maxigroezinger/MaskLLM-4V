@@ -81,6 +81,19 @@ bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.magnitude24.sh
 ```bash
 python timm_validate.py --model vit_base_patch16_224 --checkpoint CKPT_PATH --sparsity-mode maskllm
 ```
+```json
+{
+    "model": "vit_base_patch16_224",
+    "top1": 79.456,
+    "top1_err": 20.544,
+    "top5": 94.548,
+    "top5_err": 5.452,
+    "param_count": 213.97,
+    "img_size": 224,
+    "crop_pct": 0.9,
+    "interpolation": "bicubic"
+}
+```
 
 To perform MaskLLM on other models or prior types, pleae change the `--model` and `--checkpoint` arguments. 
 
