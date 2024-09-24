@@ -1,7 +1,7 @@
 # MaskLLM-4V
 This repo contains an **unofficial re-implementation** of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for Vision Transformers -- ViTs, DiTs, etc.
 
-:rocket:[[Arxiv]](), :rocket:[[NVlabs/MaskLLM (Official)]]()
+:rocket: [[Arxiv]](), :rocket: [[NVlabs/MaskLLM (Official)]]()
 
 ![maskllm_framework](assets/framework.png)
 ![gumbel_softmax](assets/gumbel_softmax.png)
