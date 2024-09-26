@@ -75,7 +75,7 @@ python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --prune
 #### Train MaskLLM based on the Magnitude Prior
 We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we train the model with EMA for 20 epochs. If you want to reduce the training time, please disable EMA since like [this script](scripts/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh).
 ```bash
-bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.magnitude24.sh
+bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh
 ```
 
 #### Evalulate MaskLLM
