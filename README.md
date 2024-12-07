@@ -2,17 +2,16 @@
 
 :paperclip: [[Arxiv]](), :rocket: [[NVlabs/MaskLLM (Official)]]()
 
-This repo contains a **re-implementation** of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for vision tasks.
+This repo contains a **minimal re-implementation** of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for vision tasks.
 
 ![maskllm_framework](assets/framework.png)
 ![gumbel_softmax](assets/gumbel_softmax.png)
 
 ## TODO List
 
-- [x] [MaskLLM for ViTs on ImageNet-1k (Classification)](#1-maskllm-for-vision-transformers)
-- [x] [Magnitude Pruning, Wanda and SparseGPT for ViTs](#2-dense---vit)
-- [ ] [MaskLLM for DiTs on ImageNet-1k (Generation)](#1-maskllm-for-diffusion-transformers)
-- [x] [Magnitude Pruning, Wanda and SparseGPT for DiTs](#2-dense---dit)
+- [x] [ViTs on ImageNet-1k (Classification)](#1-maskllm-for-vision-transformers)
+- [ ] [DiTs on ImageNet-1k (Generation)](#1-maskllm-for-diffusion-transformers)
+- [ ] Multi-modal LLMs
 - [ ] Other vision tasks (e.g., object detection, segmentation)
 - [ ] TensorRT examples
 
@@ -234,7 +233,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 ```
 </details>
 
-## Results on DiTs (In progress)
+## Results on Diffusion Transformers (In progress)
 
 ### [DiT-XL/2 (256x256)](https://github.com/facebookresearch/DiT)
 
