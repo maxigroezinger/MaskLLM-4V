@@ -37,7 +37,7 @@ print(model)
 |Wanda| 2:4 | - | - | 63.28 |
 |SparseGPT| 2:4 | :heavy_check_mark: | - | 71.52 |
 |SparseGPT w/o Update| 2:4 | - | - | 59.72 |
-|
+| |
 | **MaskLLM-4V (1 Epoch)** | **2:4** | - | SparseGPT | **76.23** |
 | **MaskLLM-4V (1 Epoch)** | **2:4** | - | Magnitude | **76.18** |
 | **MaskLLM-4V (20 Epochs)** | **2:4** | - | SparseGPT | **79.46** |
