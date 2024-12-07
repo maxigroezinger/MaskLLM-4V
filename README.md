@@ -24,7 +24,7 @@ model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinear
 print(model)
 ```
 
-## 🛰️ Results on ViTs
+## 🛰️ 1. Results on ViTs
 
 ### [ViT-B/16 (augreg_in1k, 224x224)](https://huggingface.co/timm/vit_base_patch16_224.augreg_in1k)
 
@@ -46,7 +46,7 @@ print(model)
 *Note: MaskLLM learns a separate mask with frozen network parameters for sparsification. For ViT-B/16, we can find a lossless mask through end-to-end training*
 
 
-### 0. Dataset Preparation
+### 1.0. Dataset Preparation
 Please prepare the ImageNet-1k dataset under `./data/imagenet` directory. The directory structure should be as follows:
 ```bash
 data
@@ -64,24 +64,24 @@ data
 ```
 
 
-### 1. MaskLLM for [Vision Transformers](https://arxiv.org/abs/2010.11929)
+### 1.1. MaskLLM for [Vision Transformers](https://arxiv.org/abs/2010.11929)
 
 We trained MaskLLM on ViT-B/16 with 4x24GB GPUs, requring 17G memory on each GPU with the batch size of 128. 
 
-#### 1.1 Generate Mask Prior
+#### Generate Mask Prior
 
 We first generate prior masks using oneshot pruning. This prior mask will hugely accelerate the convergence speed of the MaskLLM. replace the ``--pruner`` argument with ``magnitude``, ``wanda``, or ``sparsegpt`` to generate different prior masks. 
 ```bash 
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in1k.sparsegpt24.pt
 ```
 
-#### 1.2 Train MaskLLM based on the Magnitude Prior
+#### Train MaskLLM based on the Magnitude Prior
 We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we train the model with EMA for 20 epochs. For one-epoch training, please disable EMA like [this script](scripts/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh).
 ```bash
 bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh
 ```
 
-#### 1.3 Evalulate MaskLLM
+#### Evalulate MaskLLM
 ```bash
 python timm_validate.py --model vit_base_patch16_224 --checkpoint output/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24/MaskLLM-4V/model_best.pth.tar --sparsity-mode maskllm
 ```
@@ -101,7 +101,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/maskllm
 
 To perform MaskLLM on other models or prior types, pleae change the `--model` and `--checkpoint` arguments. 
 
-### 2. Dense - ViT
+### 1.2 Dense - ViT
 
 <details>
 <summary>Detailed Instructions</summary>
@@ -127,7 +127,7 @@ python timm_validate.py --model vit_base_patch16_224.augreg_in1k  --pretrained
 </details>
 
 
-### 3. Magnitude Pruning - ViT
+### 1.3 Magnitude Pruning - ViT
 <details>
 <summary>Detailed Instructions</summary>
 
@@ -154,7 +154,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 
 </details>
 
-### 4. Wanda - ViT
+### 1.4 Wanda - ViT
 <details>
 <summary>Detailed Instructions</summary>
 
@@ -181,7 +181,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 
 </details>
 
-### 5. SparseGPT - ViT
+### 1.5 SparseGPT - ViT
 
 <details>
 <summary>Detailed Instructions</summary>
@@ -233,13 +233,11 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 ```
 </details>
 
-## 🛰️ Results on Diffusion Transformers (In progress)
-
-### [DiT-XL/2 (256x256)](https://github.com/facebookresearch/DiT)
+## 🛰️ 2. Results on Diffusion Transformers (In progress)
 
 This part is still in progress. Please stay tuned. 
 
-### 0. Dataset
+### 2.0 Dataset
 Please prepare the ImageNet-1k dataset under `./data/imagenet` directory. The directory structure should be as follows:
 ```bash
 data
@@ -257,11 +255,11 @@ data
 ```
 
 
-### 1. MaskLLM for [Diffusion Transformers](https://arxiv.org/abs/2212.09748)
+### 2.1 MaskLLM for [Diffusion Transformers](https://arxiv.org/abs/2212.09748)
 
 TODO
 
-### 2. Dense - DiT
+### 2.2 Dense - DiT
 ```bash
 python sample.py --model DiT-XL/2
 ```
@@ -269,7 +267,7 @@ python sample.py --model DiT-XL/2
     <img src="assets/DiT_XL_2_dense.png" width="60%"/>
 </div>
 
-### 3. Magnitude Pruning - DiT
+### 2.3 Magnitude Pruning - DiT
 ```bash
 python oneshot_pruning_dit.py --model DiT-XL/2 --pruner magnitude 
 ```
@@ -277,7 +275,7 @@ python oneshot_pruning_dit.py --model DiT-XL/2 --pruner magnitude
     <img src="assets/DiT_XL_2_magnitude.png" width="60%"/>
 </div>
 
-### 4. Wanda - DiT
+### 2.4 Wanda - DiT
 ```bash
 python oneshot_pruning_dit.py --model DiT-XL/2 --pruner wanda 
 ```
@@ -285,7 +283,7 @@ python oneshot_pruning_dit.py --model DiT-XL/2 --pruner wanda
     <img src="assets/DiT_XL_2_wanda.png" width="60%"/>
 </div>
 
-### 5. SparseGPT - DiT
+### 2.5 SparseGPT - DiT
 
 #### without weight update
 ```bash
@@ -303,7 +301,7 @@ python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt --enable-updat
     <img src="assets/DiT_XL_2_sparsegpt_updated.png" width="60%"/>
 </div>
 
-## Acknowledgement
+## 3. Acknowledgement
 
 This project is based on the following repositories:
 
@@ -313,7 +311,7 @@ This project is based on the following repositories:
 - [locuslab/wanda](https://github.com/locuslab/wanda)
 
 
-## BibTeX
+## 4. BibTeX
 
 If you find this repository helpful, please consider citing the following paper.
 ```bibtex
