@@ -29,21 +29,25 @@ print(model)
 
 ### [ViT-B/16 (augreg_in1k, 224x224)](https://huggingface.co/timm/vit_base_patch16_224.augreg_in1k)
 
-|Method|Sparsity Pattern|Weight Update| Top-1 Acc. (%) |
-|---|:---:|:---:|:---:|
-| ViT-B/16 (in1k) | Dense | - | 79.15 |
+|Method|Sparsity Pattern|Weight Update| Mask Prior | Top-1 Acc. (%) |
+|---|:---:|:---:|:---:| :---: |
+| ViT-B/16 (in1k) | Dense | - | - | 79.15 |
 ||
-|Magnitude| 2:4 | - | 65.92 |
-|Wanda| 2:4 | - | 63.28 |
-|SparseGPT| 2:4 | :heavy_check_mark: | 71.52 |
-|SparseGPT w/o Update| 2:4 | - | 59.72 |
-| **MaskLLM-4V (1 Epoch)** | **2:4** | - | **76.23** |
-| **MaskLLM-4V (20 Epochs)** | **2:4** | - | **79.46** |
+|Magnitude| 2:4 | - | - | 65.92 |
+|Wanda| 2:4 | - | - | 63.28 |
+|SparseGPT| 2:4 | :heavy_check_mark: | - | 71.52 |
+|SparseGPT w/o Update| 2:4 | - | - | 59.72 |
+|
+| **MaskLLM-4V (1 Epoch)** | **2:4** | - | SparseGPT | **76.23** |
+| **MaskLLM-4V (1 Epoch)** | **2:4** | - | Magnitude | **76.18** |
+| **MaskLLM-4V (20 Epochs)** | **2:4** | - | SparseGPT | **79.46** |
+| **MaskLLM-4V (20 Epochs)** | **2:4** | - | Magnitude | **79.28** |
+
 
 *Note: MaskLLM learns a seperated mask with frozen network parameters for sparsification. For ViT-B/16, we are able to find a lossless mask through learning*
 
 
-### 0. Dataset
+### 0. Dataset Preparation
 Please prepare the ImageNet-1k dataset under `./data/imagenet` directory. The directory structure should be as follows:
 ```bash
 data
@@ -63,25 +67,24 @@ data
 
 ### 1. MaskLLM for [Vision Transformers](https://arxiv.org/abs/2010.11929)
 
-We train the masks with 4x24GB GPUs. The training of ViT-B/16 requires 22G memory on each GPU, with the batch size of 128.
+We trained MaskLLM on ViT-B/16 with 4x24GB GPUs, requring 17G memory on each GPU with the batch size of 128. 
 
-#### Generate Mask Prior
+#### 1.1 Generate Mask Prior
 
-First, we generate prior masks with SparseGPT. This prior mask will hugely accelerate the convergence speed of the MaskLLM. Also you can use magnitude pruning for the prior mask.
-
+We first generate prior masks using oneshot pruning. This prior mask will hugely accelerate the convergence speed of the MaskLLM. replace the ``--pruner`` argument with ``magnitude``, ``wanda``, or ``sparsegpt`` to generate different prior masks. 
 ```bash 
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in1k.sparsegpt24.pt
 ```
 
-#### Train MaskLLM based on the Magnitude Prior
-We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we train the model with EMA for 20 epochs. If you want to reduce the training time, please disable EMA since like [this script](scripts/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh).
+#### 1.2 Train MaskLLM based on the Magnitude Prior
+We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we train the model with EMA for 20 epochs. For one-epoch training, please disable EMA like [this script](scripts/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh).
 ```bash
 bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh
 ```
 
-#### Evalulate MaskLLM
+#### 1.3 Evalulate MaskLLM
 ```bash
-python timm_validate.py --model vit_base_patch16_224 --checkpoint CKPT_PATH --sparsity-mode maskllm
+python timm_validate.py --model vit_base_patch16_224 --checkpoint output/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24/MaskLLM-4V/model_best.pth.tar --sparsity-mode maskllm
 ```
 ```json
 {
