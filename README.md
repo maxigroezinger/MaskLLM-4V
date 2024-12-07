@@ -44,7 +44,7 @@ print(model)
 | **MaskLLM-4V (20 Epochs)** | **2:4** | - | Magnitude | **79.28** |
 
 
-*Note: MaskLLM learns a seperated mask with frozen network parameters for sparsification. For ViT-B/16, we can find a lossless mask through end-to-end training*
+*Note: MaskLLM learns a separate mask with frozen network parameters for sparsification. For ViT-B/16, we can find a lossless mask through end-to-end training*
 
 
 ### 0. Dataset Preparation
