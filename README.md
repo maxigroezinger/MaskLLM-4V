@@ -24,7 +24,7 @@ model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinear
 print(model)
 ```
 
-## Results on ViTs
+## 🛰️ Results on ViTs
 
 ### [ViT-B/16 (augreg_in1k, 224x224)](https://huggingface.co/timm/vit_base_patch16_224.augreg_in1k)
 
@@ -233,7 +233,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/pruned/
 ```
 </details>
 
-## Results on Diffusion Transformers (In progress)
+## 🛰️ Results on Diffusion Transformers (In progress)
 
 ### [DiT-XL/2 (256x256)](https://github.com/facebookresearch/DiT)
 
