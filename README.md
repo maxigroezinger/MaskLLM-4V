@@ -18,7 +18,7 @@ This repo contains a **re-implementation** of the paper "MaskLLM: Learnable Semi
 
 ## Quick Start
 
-To enable MaskLLM on your model, please replace the `nn.Linear` with [`sparsity.maskllm.MaskedLinear`](sparsity/maskllm.py). This can be done easily with the following code:
+To enable MaskLLM on your model, please replace the `nn.Linear` with [`sparsity.maskllm.MaskedLinear`](sparsity/maskllm.py). This can be easily achieved with the following code snippet:
 ```python
 import sparsity
 model = sparsity.utils.replace_linear_with_(model, sparsity.maskllm.MaskedLinear, exclude=[model.head], N=2, M=4, hard=False)
