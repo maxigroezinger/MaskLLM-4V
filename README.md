@@ -315,4 +315,10 @@ This project is based on the following repositories:
 
 If you find this repository helpful, please consider citing the following paper.
 ```bibtex
+@article{fang2024maskllm,
+  title={Maskllm: Learnable semi-structured sparsity for large language models},
+  author={Fang, Gongfan and Yin, Hongxu and Muralidharan, Saurav and Heinrich, Greg and Pool, Jeff and Kautz, Jan and Molchanov, Pavlo and Wang, Xinchao},
+  journal={arXiv preprint arXiv:2409.17481},
+  year={2024}
+}
 ```
