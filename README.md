@@ -66,7 +66,7 @@ data
 
 ### 1.1. MaskLLM for [Vision Transformers](https://arxiv.org/abs/2010.11929)
 
-We trained MaskLLM on ViT-B/16 with 4x24GB GPUs, requring 17G memory on each GPU with the batch size of 128. 
+We trained MaskLLM on ViT-B/16 with 4x24GB GPUs, requiring 17G memory on each GPU with a batch size of 128. 
 
 #### Generate Mask Prior
 
@@ -75,7 +75,7 @@ We first generate prior masks using oneshot pruning. This prior mask will hugely
 python oneshot_pruning_timm.py --model vit_base_patch16_224.augreg_in1k  --pruner sparsegpt --save-model output/pruned/vit_base_patch16_224.augreg_in1k.sparsegpt24.pt
 ```
 
-#### Train MaskLLM based on the Magnitude Prior
+#### Train MaskLLM based on the SparseGPT Prior
 We took training hyperparameters from [this timm issue](https://huggingface.co/timm/vit_base_patch16_224.augreg2_in21k_ft_in1k/discussions/1). By default, we train the model with EMA for 20 epochs. For one-epoch training, please disable EMA like [this script](scripts/maskllm_1epoch_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh).
 ```bash
 bash scripts/maskllm_vit_base_patch16_224.augreg_in1k.sparsegpt24.sh
@@ -99,7 +99,7 @@ python timm_validate.py --model vit_base_patch16_224 --checkpoint output/maskllm
 }
 ```
 
-To perform MaskLLM on other models or prior types, pleae change the `--model` and `--checkpoint` arguments. 
+To perform MaskLLM on other models or prior types, please change the `--model` and `--checkpoint` arguments. 
 
 ### 1.2 Dense - ViT
 
@@ -301,7 +301,7 @@ python oneshot_pruning_dit.py --model DiT-XL/2 --pruner sparsegpt --enable-updat
     <img src="assets/DiT_XL_2_sparsegpt_updated.png" width="60%"/>
 </div>
 
-## 3. Acknowledgement
+## 3. Acknowledgment
 
 This project is based on the following repositories:
 
