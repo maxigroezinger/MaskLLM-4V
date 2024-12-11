@@ -2,7 +2,7 @@
 
 :paperclip: [[Arxiv]](), :rocket: [[NVlabs/MaskLLM (Official)]]()
 
-This repo contains a **minimal re-implementation** of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for vision tasks.
+This repo contains a **minimal re-implementation** of the paper "MaskLLM: Learnable Semi-structured Sparsity for Large Language Models" for **vision tasks**.
 
 ![maskllm_framework](assets/framework.png)
 ![gumbel_softmax](assets/gumbel_softmax.png)
