@@ -6,137 +6,170 @@ import torch.nn as nn
 import transformers
 
 
-DEBUG = False 
-
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 
-class SparseGPT:
-
-    def __init__(self, layer):
+class SparseGPTFrechet:
+    def __init__(self, layer, alpha=1.0, beta=1.0):
+        """
+        layer: nn.Linear, nn.Conv2d, or transformers.Conv1D
+        alpha: weight on mean-matching term
+        beta: weight on covariance-matching term
+        """
         self.layer = layer
-        self.dev = self.layer.weight.device
+        self.dev = layer.weight.device
         W = layer.weight.data.clone()
-        if isinstance(self.layer, nn.Conv2d):
-            W = W.flatten(1)
-        if isinstance(self.layer, transformers.Conv1D):
-            W = W.t()
-        self.rows = W.shape[0]
-        self.columns = W.shape[1]
-        self.H = torch.zeros((self.columns, self.columns), device=self.dev)
+        # determine rows (output dim) and columns (input dim)
+        if isinstance(layer, nn.Conv2d):
+            # flatten weight to [out_features, in_features]
+            W_flat = W.flatten(1)
+            self.rows, self.columns = W_flat.shape
+        elif isinstance(layer, transformers.Conv1D):
+            # Conv1D stores weight as [in, out]
+            W_flat = W.t()
+            self.rows, self.columns = W_flat.shape
+        else:
+            # nn.Linear
+            self.rows, self.columns = W.shape
+
+        # Frechet accumulators
+        self.alpha = alpha
+        self.beta = beta
+        self.sum_a = torch.zeros(self.columns, device=self.dev)
+        self.sum_outer = torch.zeros((self.columns, self.columns), device=self.dev)
         self.nsamples = 0
 
-    def add_batch(self, inp, out, blocksize=1024):
-        if DEBUG:
-            self.inp1 = inp
-            self.out1 = out
-        if len(inp.shape) == 2:
-            inp = inp.unsqueeze(0)
-        tmp = inp.shape[0]
-        if isinstance(self.layer, nn.Linear) or isinstance(self.layer, transformers.Conv1D):
-            if len(inp.shape) == 3:
-                inp = inp.reshape((-1, inp.shape[-1]))
-            inp = inp.t()
-        self.H *= self.nsamples / (self.nsamples + tmp)
-        self.nsamples += tmp
-        inp = math.sqrt(2 / self.nsamples) * inp.float()
-        self.H += inp.matmul(inp.t())
+    def add_batch(self, inp, out=None):
+        """
+        Accumulate input statistics.  inp may be:
+         - [batch, in_features] for Linear
+         - [batch, seq_len, in_features] for Conv1D
+         - [batch, in_channels, H, W] for Conv2d
+        """
+        # reshape input to [num_samples, in_features]
+        x = inp
+        if isinstance(self.layer, nn.Conv2d):
+            # permute to [batch, H, W, C] then flatten
+            N, C, H, W = x.shape
+            x = x.permute(0, 2, 3, 1).reshape(-1, C)
+        elif isinstance(self.layer, transformers.Conv1D):
+            # x: [batch, seq_len, in]
+            if x.dim() == 3:
+                x = x.reshape(-1, x.shape[-1])
+        elif isinstance(self.layer, nn.Linear):
+            if x.dim() == 2:
+                # [batch, in]
+                pass
+            else:
+                # maybe [batch, seq_len, in]
+                x = x.reshape(-1, x.shape[-1])
+        else:
+            raise NotImplementedError(f"Unsupported layer type {type(self.layer)}")
 
-    def fasterprune(
-        self, sparsity_ratio, prunen=0, prunem=0, blocksize=128, percdamp=.01, disable_update=False
-    ):
+        # x now [samples, in_features]
+        assert x.shape[1] == self.columns, f"Expected in_features={self.columns}, got {x.shape[1]}"
+        samples = x.shape[0]
+        # accumulate
+        self.sum_a += x.sum(dim=0)
+        self.sum_outer += x.t().matmul(x)
+        self.nsamples += samples
+
+    def fasterprune(self, sparsity_ratio, prunen=0, prunem=0,
+                    blocksize=128, percdamp=0.01, disable_update=False):
+        """
+        Perform one-shot N:M pruning update using Frechet-style objective.
+        sparsity_ratio: fraction of weights to prune in each block
+        prunen, prunem: optional structured pruning arguments
+        blocksize: number of columns to process per chunk
+        percdamp: damping fraction on diagonal of Frechet Hessian
+        disable_update: if True, only compute masks without updating weights
+        """
+        # Build Frechet Hessian: H = alpha * mu mu^T + beta * Sigma
+        mu = self.sum_a / self.nsamples  # [in_features]
+        Sigma = self.sum_outer / self.nsamples - mu.unsqueeze(1).matmul(mu.unsqueeze(0))
+        H = self.alpha * mu.unsqueeze(1).matmul(mu.unsqueeze(0)) + self.beta * Sigma
+
+        # Extract weight matrix W_flat: [out_features, in_features]
         W = self.layer.weight.data.clone()
         if isinstance(self.layer, nn.Conv2d):
             W = W.flatten(1)
         if isinstance(self.layer, transformers.Conv1D):
             W = W.t()
         W = W.float()
-        M= torch.ones_like(W)
 
-        tick = time.time()
-
-        H = self.H
-        del self.H
-        dead = torch.diag(H) == 0
-        H[dead, dead] = 1
-        W[:, dead] = 0
-
+        # Initialize mask M and losses tracking
+        M = torch.ones_like(W, dtype=torch.bool, device=self.dev)
         Losses = torch.zeros(self.rows, device=self.dev)
 
-        damp = percdamp * torch.mean(torch.diag(H))
-        diag = torch.arange(self.columns, device=self.dev)
-        H[diag, diag] += damp
-        H = torch.linalg.cholesky(H)
-        H = torch.cholesky_inverse(H)
-        H = torch.linalg.cholesky(H, upper=True)
-        Hinv = H
+        # Add damping to H for numerical stability
+        damp = percdamp * torch.mean(torch.diagonal(H))
+        diag_idx = torch.arange(self.columns, device=self.dev)
+        H[diag_idx, diag_idx] += damp
 
-        mask = None
+        # Compute H_inv^{1/2} for block updates
+        # cholesky H -> lower L, then invert, then cholesky for upper R
+        L = torch.linalg.cholesky(H)
+        H_inv = torch.cholesky_inverse(L)
+        R = torch.linalg.cholesky(H_inv, upper=True)
+        Hinv = R
 
+        # Block-wise one-shot solve (same pattern as SparseGPT)
         for i1 in range(0, self.columns, blocksize):
             i2 = min(i1 + blocksize, self.columns)
-            count = i2 - i1
-
-            W1 = W[:, i1:i2].clone()
-            M1 = M[:, i1:i2].clone()
-            Q1 = torch.zeros_like(W1)
-            Err1 = torch.zeros_like(W1)
-            Losses1 = torch.zeros_like(W1)
-            Hinv1 = Hinv[i1:i2, i1:i2]
-
-            if prunen == 0: 
-                if mask is not None:
-                    mask1 = mask[:, i1:i2]
-                else:
-                    tmp = W1 ** 2 / (torch.diag(Hinv1).reshape((1, -1))) ** 2
-                    thresh = torch.sort(tmp.flatten())[0][int(tmp.numel() * sparsity_ratio)]
-                    mask1 = tmp <= thresh
+            W_block = W[:, i1:i2].clone()
+            M_block = M[:, i1:i2].clone()
+            Hinv_block = Hinv[i1:i2, i1:i2]
+            block_count = i2 - i1
+            
+            # Determine mask per-column if not provided
+            if prunen == 0:
+                scores = (W_block**2) / (torch.diagonal(Hinv_block)**2).reshape(1, -1)
+                thresh = torch.quantile(scores, sparsity_ratio)
+                mask_block = scores <= thresh
             else:
-                mask1 = torch.zeros_like(W1) == 1
+                # legacy prunem-based mask
+                mask_block = torch.zeros_like(W_block, dtype=torch.bool)
 
-            for i in range(count):
-                w = W1[:, i]
-                m = M1[:, i]
-                d = Hinv1[i, i]
+            # Apply mask and compute updates
+            Err = torch.zeros_like(W_block)
+            Loss_block = torch.zeros_like(W_block)
+            for j in range(block_count):
+                wj = W_block[:, j]
+                mj = mask_block[:, j]
+                pj = ~mj  # keep positions
+                d = Hinv_block[j, j]
 
-                if prunen != 0 and i % prunem == 0:
-                    tmp = W1[:, i:(i + prunem)] ** 2 / (torch.diag(Hinv1)[i:(i + prunem)].reshape((1, -1))) ** 2
-                    mask1.scatter_(1, i + torch.topk(tmp, prunen, dim=1, largest=False)[1], True)
-
-                q = w.clone()
-                q[mask1[:, i]] = 0
-                m[mask1[:, i]] = 0
-
-                Q1[:, i] = q
-                M1[:, i] = m
-                Losses1[:, i] = (w - q) ** 2 / d ** 2
+                # prune: set wj[mj] = 0
+                qj = wj.clone()
+                qj[mj] = 0.0
+                M_block[:, j] = pj
+                Loss_block[:, j] = (wj - qj)**2 / d**2
 
                 if not disable_update:
-                    err1 = (w - q) / d
-                    W1[:, i:] -= err1.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
-                    Err1[:, i] = err1
-            if not disable_update:
-                W[:, i1:i2] = Q1
-            M[:, i1:i2] = M1
-            Losses += torch.sum(Losses1, 1) / 2
-            if not disable_update:
-                W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
+                    errj = (wj - qj) / d
+                    # rank-1 update to remaining columns
+                    W_block[:, j:] -= errj.unsqueeze(1).matmul(Hinv_block[j, j:].unsqueeze(0))
+                    Err[:, j] = errj
 
-        torch.cuda.synchronize()
-        print('time %.2f' % (time.time() - tick))
-        print('error', torch.sum(Losses).item())
+            # write back
+            if not disable_update:
+                W[:, i1:i2] = W_block
+            M[:, i1:i2] = M_block
+            Losses += Loss_block.sum(dim=1) / 2
 
+            if not disable_update:
+                # propagate error to future blocks
+                W[:, i2:] -= Err.matmul(Hinv[i1:i2, i2:])
+
+        # Copy mask & weights back into layer
         if isinstance(self.layer, transformers.Conv1D):
             W = W.t()
- 
-        self.layer.mask.data = M.to(dtype=self.layer.weight.dtype)
+        if isinstance(self.layer, nn.Conv2d):
+            W = W.reshape(self.layer.weight.shape)
+        self.layer.mask.data = M.to(self.layer.weight.dtype)
         if not disable_update:
-            self.layer.weight.data = W.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
+            self.layer.weight.data = W.to(self.layer.weight.dtype)
 
-    def free(self):
-        if DEBUG:
-            self.inp1 = None
-            self.out1 = None
-        self.H = None
-        torch.cuda.empty_cache()
+        # report
+        print(f"Frechet-SparseGPT: total error {Losses.sum().item():.4f}")
