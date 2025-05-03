@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import timm
 import sparsity
-from sparsity.sparsegpt import SparseGPT
+from sparsity.sparsegpt import SparseGPTFrechet
 
 def find_layers(module, layers=[nn.Linear], name=''):
     """
@@ -112,13 +112,17 @@ def prune_wanda(model, loader, nsamples=128, batch_size=1, device=torch.device("
         layer.mask.data = ~W_mask
         print(f"Layer {name} Sparsity: {torch.sum(W_mask).item()/W_mask.numel()}")
         
+# ---- Updated prune function ----
 @torch.no_grad()
-def prune_sparsegpt(model, loader, nsamples=128, batch_size=1, device=torch.device("cuda:0"), prune_n=0, prune_m=0, sparsity_ratio=0.0, disable_update=False):
-    # Initialize input caches
+def prune_sparsegpt(model, loader, nsamples=128, batch_size=1,
+                     device=torch.device("cuda:0"), prune_n=0, prune_m=0,
+                     sparsity_ratio=0.0, disable_update=False):
+    # cache inputs
     layers = model.blocks
-    dtype = next(iter(model.parameters())).dtype
+    dtype = next(model.parameters()).dtype
     inps = torch.zeros(
-        (nsamples, model.num_prefix_tokens+model.patch_embed.num_patches, model.embed_dim), dtype=dtype, device=device
+        (nsamples, model.num_prefix_tokens+model.patch_embed.num_patches, model.embed_dim),
+        dtype=dtype, device=device
     )
     cache = {'i': 0}
 
@@ -130,9 +134,11 @@ def prune_sparsegpt(model, loader, nsamples=128, batch_size=1, device=torch.devi
             inps[cache['i']] = inp
             cache['i'] += 1
             raise ValueError
+
+    # collect forward inputs
     layers[0] = Catcher(layers[0])
     for batch in loader:
-        if cache['i'] == nsamples: break
+        if cache['i'] >= nsamples: break
         try:
             model(batch[0].to(device))
         except ValueError:
@@ -142,41 +148,37 @@ def prune_sparsegpt(model, loader, nsamples=128, batch_size=1, device=torch.devi
 
     outs = torch.zeros_like(inps)
     print('Ready.')
-    for i in range(len(layers)):
-        layer = layers[i]
-        inps, outs = inps.to(device), outs.to(device)
 
+    for i, layer in enumerate(layers):
+        inps, outs = inps.to(device), outs.to(device)
         subset = find_layers(layer)
 
-        gpts = {}
-        for name in subset:
-            gpts[name] = SparseGPT(subset[name])
-
-        def add_batch(name):
-            def tmp(_, inp, out):
-                gpts[name].add_batch(inp[0].data, out.data)
-            return tmp
-
+        # instantiate Frechet pruners
+        gpts = {name: SparseGPTFrechet(subset[name]) for name in subset}
         handles = []
-        for name in gpts:
-            handles.append(subset[name].register_forward_hook(add_batch(name)))
+        for name, pruner in gpts.items():
+            handles.append(subset[name].register_forward_hook(
+                lambda module, inp, out, pr=pruner: pr.add_batch(inp[0].data)
+            ))
 
-        for j in range(args.nsamples):
+        # collect stats
+        for j in range(nsamples):
             outs[j] = layer(inps[j].unsqueeze(0))[0]
-        for h in handles:
-            h.remove()
+        for h in handles: h.remove()
 
-        for name in gpts:
-            print(i, name)
-            print('Pruning ...')
+        # prune with Frechet objective
+        for name, pruner in gpts.items():
+            print(f"Layer {i}, pruning {name}...")
+            pruner.fasterprune(sparsity_ratio, prunen=prune_n,
+                                prunem=prune_m, percdamp=0.01,
+                                blocksize=128, disable_update=disable_update)
+            pruner.free()
 
-            gpts[name].fasterprune(sparsity_ratio, prunen=prune_n, prunem=prune_m, percdamp=0.01, blocksize=128, disable_update=disable_update)
-            gpts[name].free()
-
-        for j in range(args.nsamples):
+        # run layer forward to swap in updated weights
+        for j in range(nsamples):
             outs[j] = layer(inps[j].unsqueeze(0))[0]
 
-        layers[i] = layer 
+        layers[i] = layer
         torch.cuda.empty_cache()
 
         inps, outs = outs, inps
