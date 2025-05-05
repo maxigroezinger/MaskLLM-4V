@@ -97,7 +97,7 @@ class SparseGPT:
 
         # blockwise pruning (unchanged)
         mask = None
-        for i1 in range(0, self.columns, blocksize):
+        (0, self.columns, blocksize):
             i2 = min(i1 + blocksize, self.columns)
             count = i2 - i1
             W1 = W[:, i1:i2].clone(); M1 = M[:, i1:i2].clone()
@@ -148,4 +148,5 @@ class SparseGPT:
             self.inp1 = self.out1 = None
         self.H = self.C = None
         torch.cuda.empty_cache()
+
 
