@@ -6,101 +6,74 @@ import torch.nn as nn
 import transformers
 
 # -----------------------------------------------------------------------------
-# SparseGPT‑Mahalanobis: one‑shot pruning with a block‑wise Kronecker OBS solve
+# SparseGPT‑Mahalanobis *minimal diff* edition
 # -----------------------------------------------------------------------------
-# ‑ Keeps the public interface of the original SparseGPT class intact
-# ‑ Works for nn.Linear / transformers.Conv1D / Conv2d exactly as before
-# ‑ No Woodbury trick – everything is classic Cholesky, identical to the 
-#   code‑base you pasted.                                                    
-# ‑ Additional feature: uses an **output‑side Mahalanobis loss** specified by
-#   the empirical covariance   Σ = YYᵀ / N  collected during add_batch().
-#   The corresponding Kronecker‑factored Hessian is        (XXᵀ) ⊗ Σ⁻¹.
-#   A block‑wise closed form makes pruning 
-#     ΔW  =  - Σ · R · A⁻¹            (see accompanying explanation).
+# ‑ Keeps all public methods / arguments identical to the original (ICML‑23)
+# ‑ Adds an **output‑side Mahalanobis metric** through the Kronecker Hessian
+#     H = (XXᵀ) ⊗ Σ⁻¹   with  Σ = YYᵀ / N  collected during add_batch().
+# ‑ Update order, variable names, inner loops, and printed diagnostics mirror
+#   the vanilla code as closely as possible, so you can diff line‑by‑line.
 # -----------------------------------------------------------------------------
 
 DEBUG = False
 
-# make reproducibility explicit
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 class SparseGPT:
-    """Drop‑in replacement that minimises a Mahalanobis‑weighted OBS loss.
-
-    Interface is *identical* to the original SparseGPT   (add_batch, fasterprune,
-    free).  Paste & run.
-    """
 
     # ------------------------------------------------------------
-    # INITIALISATION
+    # INITIALISATION (unchanged)
     # ------------------------------------------------------------
     def __init__(self, layer):
         self.layer = layer
-        self.dev   = self.layer.weight.device
+        self.dev   = layer.weight.device
 
-        # --- infer flattened weight shape -----------------------------------
         W = layer.weight.data.clone()
         if isinstance(layer, nn.Conv2d):
-            W = W.flatten(1)                # out_ch × (in_ch*k*k)
+            W = W.flatten(1)
         if isinstance(layer, transformers.Conv1D):
-            W = W.t()                       # transformers stores transposed
+            W = W.t()
 
-        self.rows    = W.shape[0]           # d_out  (channels)
-        self.columns = W.shape[1]           # d_in   (input dim)
+        self.rows    = W.size(0)   # d_out
+        self.columns = W.size(1)   # d_in
 
-        # --- store *input* covariance (X Xᵀ) like the original implementation
-        self.H = torch.zeros((self.columns, self.columns), device=self.dev)
-        # --- store *output* covariance (Y Yᵀ)
-        self.Sigma = torch.zeros((self.rows, self.rows), device=self.dev)
-
-        self.nsamples = 0                   # running tally for both stats
+        # input covariance (XXᵀ) and output covariance (YYᵀ)
+        self.H     = torch.zeros((self.columns, self.columns), device=self.dev)
+        self.Sigma = torch.zeros((self.rows,   self.rows),   device=self.dev)
+        self.nsamples = 0
 
     # ------------------------------------------------------------
-    # ADD A CALIBRATION BATCH
+    # ACCUMULATE COVARIANCES (add_batch)
     # ------------------------------------------------------------
     def add_batch(self, inp, out, blocksize: int = 1024):
-        """Accumulate XXᵀ and YYᵀ, exactly mirroring the original scaling.
-
-        Args
-        ----
-        inp  : activation *into* the pruned layer     (shape … × d_in)
-        out  : activation *out of* the pruned layer   (shape … × d_out)
-        """
         if DEBUG:
-            self.inp1 = inp
-            self.out1 = out
+            self.inp1, self.out1 = inp, out
 
-        # make inputs 3‑D  (batch, …, dim)  to reuse original logic
         if len(inp.shape) == 2:
             inp = inp.unsqueeze(0)
-        if len(out.shape) == 2:
             out = out.unsqueeze(0)
 
-        # Flatten arbitrary leading dims into batch*seq
+        # flatten leading dims for linear / Conv1D to match original shapes
+        if isinstance(self.layer, (nn.Linear, transformers.Conv1D)) and len(inp.shape) == 3:
+            inp = inp.reshape((-1, inp.shape[-1]))
+            out = out.reshape((-1, out.shape[-1]))
         if isinstance(self.layer, (nn.Linear, transformers.Conv1D)):
-            if len(inp.shape) == 3:
-                inp = inp.reshape((-1, inp.shape[-1]))   # (N, d_in)
-                out = out.reshape((-1, out.shape[-1]))   # (N, d_out)
-            inp = inp.t()   # → (d_in, N)
-            out = out.t()   # → (d_out, N)
+            inp = inp.t()   # (d_in,  N)
+            out = out.t()   # (d_out, N)
 
-        tmp = inp.shape[1]           # number of new samples N_b
-
-        # --- Running mean of covariances, identical scale as original code ---
-        self.H     *= self.nsamples / (self.nsamples + tmp)
-        self.Sigma *= self.nsamples / (self.nsamples + tmp)
-        self.nsamples += tmp
+        Nb = inp.size(1)
+        self.H     *= self.nsamples / (self.nsamples + Nb)
+        self.Sigma *= self.nsamples / (self.nsamples + Nb)
+        self.nsamples += Nb
 
         scale = math.sqrt(2 / self.nsamples)
-        inp   = (inp.float()  * scale)            # (d_in , N)
-        out   = (out.float()  * scale)            # (d_out, N)
-
-        self.H     += inp.matmul(inp.t())         # update X Xᵀ
-        self.Sigma += out.matmul(out.t())         # update Y Yᵀ
+        inp, out = inp.float() * scale, out.float() * scale
+        self.H     += inp.matmul(inp.t())
+        self.Sigma += out.matmul(out.t())
 
     # ------------------------------------------------------------
-    # THE PRUNE PASS
+    # PRUNE PASS (fasterprune) — structure identical to baseline
     # ------------------------------------------------------------
     def fasterprune(
         self,
@@ -111,166 +84,137 @@ class SparseGPT:
         percdamp: float = 0.01,
         disable_update: bool = False,
     ):
-        """One‑shot pruning with Mahalanobis OBS compensation.
-
-        *All* public arguments preserved.  `prunen`/`prunem` structured sparsity
-        continues to work.  `disable_update` still lets you only compute masks.
-        """
-
-        # ------------------------------------------------------------------
-        # Flatten weights exactly like the reference implementation
-        # ------------------------------------------------------------------
+        # --- flatten weights like the original --------------------------------
         W = self.layer.weight.data.clone()
         if isinstance(self.layer, nn.Conv2d):
             W = W.flatten(1)
         if isinstance(self.layer, transformers.Conv1D):
             W = W.t()
         W = W.float()
-        M = torch.ones_like(W)          # pruning mask (1 = keep, 0 = pruned)
+        M = torch.ones_like(W)
 
-        tick = time.time()
+        tic = time.time()
 
-        # ------------------------------------------------------------------
-        # INPUT‑SIDE COVARIANCE  – identical to baseline SparseGPT
-        # ------------------------------------------------------------------
-        H  = self.H.clone()
-        del self.H                         # free memory early
-        dead = torch.diag(H) == 0          # guards against unused inputs
+        # --------------------------- INPUT CURVATURE --------------------------
+        H = self.H
+        del self.H
+        dead = torch.diag(H) == 0
         H[dead, dead] = 1
-        W[:, dead] = 0                     # irrelevant weights → 0
+        W[:, dead] = 0
 
-        dampH = percdamp * torch.mean(torch.diag(H))
-        diag_idx_col = torch.arange(self.columns, device=self.dev)
-        H[diag_idx_col, diag_idx_col] += dampH
+        diag_idx = torch.arange(self.columns, device=self.dev)
+        H[diag_idx, diag_idx] += percdamp * torch.mean(torch.diag(H))
 
-        # A_inv  = (XXᵀ + λI)⁻¹  via Cholesky
-        L_H      = torch.linalg.cholesky(H)          # lower‑triangular L
-        A_inv    = torch.cholesky_inverse(L_H)       # full inverse (d_in × d_in)
-        # keep the *upper* Cholesky of A_inv to reuse original denominators
-        Hinv_chol = torch.linalg.cholesky(A_inv, upper=True)   # R  s.t. A_inv = Rᵀ R
+        L   = torch.linalg.cholesky(H)              # L Lᵀ = H
+        Ainv = torch.cholesky_inverse(L)            # (XXᵀ+λI)⁻¹
+        R   = torch.linalg.cholesky(Ainv, upper=True)   # Rᵀ R = Ainv
 
-        # ------------------------------------------------------------------
-        # OUTPUT‑SIDE COVARIANCE  Σ = YYᵀ / N
-        # ------------------------------------------------------------------
-        S  = self.Sigma.clone()
-        del self.Sigma                    # we do not need the accumulator any more
+        # cache useful pieces
+        Ainv_diag      = torch.diag(Ainv)           # vector (d_in)
+        R_diag         = torch.diag(R)              # sqrt(Ainv_diag)
 
-        dampS = percdamp * torch.mean(torch.diag(S))
-        diag_idx_row = torch.arange(self.rows, device=self.dev)
-        S[diag_idx_row, diag_idx_row] += dampS
+        # --------------------------- OUTPUT CURVATURE -------------------------
+        S = self.Sigma
+        del self.Sigma
+        row_idx = torch.arange(self.rows, device=self.dev)
+        S[row_idx, row_idx] += percdamp * torch.mean(torch.diag(S))
 
-        # Σ_inv  (for scores)  and   Σ   (for compensation)
-        L_S          = torch.linalg.cholesky(S)          # d_out × d_out  lower‑triangular
-        Sigma_inv    = torch.cholesky_inverse(L_S)       # Σ⁻¹       (dense)
-        Sigma_inv_d  = torch.diag(Sigma_inv)             # vector of row precisions
+        LS      = torch.linalg.cholesky(S)          # lower‑tri Σ^{1/2}
+        Sinv    = torch.cholesky_inverse(LS)        # Σ⁻¹
+        Sinv_d  = torch.diag(Sinv)                  # precisions per row
 
-        # keep S itself   (needed for ΔW = - S R A_inv)
-        Sigma = S                                       # renamed for clarity
+        # --------------------------------------------------------------------
+        Losses = torch.zeros(self.rows, device=self.dev)
+        mask_global = None
 
-        # Pre‑compute denominators used throughout
-        A_inv_d    = torch.diag(A_inv)                  # d_in      (full)
-        A_inv_d_sqrt = torch.diag(Hinv_chol)            # sqrt of diag(A_inv)
-
-        mask = None   # will be allocated once for magnitude pruning path
-
-        # ------------------------------------------------------------------
-        # MAIN COLUMN‑WISE LOOP (unchanged public behaviour)
-        # ------------------------------------------------------------------
         for i1 in range(0, self.columns, blocksize):
             i2     = min(i1 + blocksize, self.columns)
             count  = i2 - i1
 
-            # local views for the current block
-            W1 = W[:, i1:i2].clone()        # rows × count
+            W1 = W[:, i1:i2].clone()
             M1 = M[:, i1:i2].clone()
+            Q1 = torch.zeros_like(W1)
+            Err1 = torch.zeros_like(W1)             # store Σ·err per column
+            Losses1 = torch.zeros_like(W1)
+            Rblock  = R[i1:i2, i1:i2]               # upper‑tri sqrt(Ainv) slice
 
-            # --------------------------------------------------------------
-            # 1.  Importance scores  (Mahalanobis version)
-            # --------------------------------------------------------------
-            denom = Sigma_inv_d[:, None] * A_inv_d[i1:i2][None, :]   # rows × count
-            tmp   = (W1 ** 2) / denom
-
-            # --- magnitude‑like pruning mask ---------------------------------
+            # importance scores ------------------------------------------------
+            denom_block = Sinv_d[:, None] * Ainv_diag[i1:i2][None, :]
+            score_block = (W1 ** 2) / denom_block
             if prunen == 0:
-                if mask is not None:
-                    mask1 = mask[:, i1:i2]
+                if mask_global is not None:
+                    mask1 = mask_global[:, i1:i2]
                 else:
-                    thresh = torch.sort(tmp.flatten())[0][int(tmp.numel() * sparsity_ratio)]
-                    mask1  = tmp <= thresh
+                    thresh = torch.sort(score_block.flatten())[0][int(score_block.numel() * sparsity_ratio)]
+                    mask1  = score_block <= thresh
             else:
                 mask1 = torch.zeros_like(W1, dtype=torch.bool, device=self.dev)
 
-            # N:M structured pruning (if requested) --------------------------
+            # structured N:M pruning -----------------------------------------
             if prunen != 0:
                 for j in range(0, count, prunem):
-                    col_span = slice(j, j + prunem)
-                    block    = tmp[:, col_span]
-                    k_small  = torch.topk(block, prunen, dim=1, largest=False)[1]
-                    rows_idx = torch.arange(block.size(0), device=self.dev).unsqueeze(1)
-                    mask1[rows_idx, j + k_small] = True
+                    sub = score_block[:, j:j+prunem]
+                    k_small = torch.topk(sub, prunen, dim=1, largest=False)[1]
+                    rows_i  = torch.arange(sub.size(0), device=self.dev).unsqueeze(1)
+                    mask1[rows_i, j + k_small] = True
 
-            # --------------------------------------------------------------
-            # 2.  Apply the mask and compute the OBS compensation
-            # --------------------------------------------------------------
-            Q1      = W1.clone()
-            Q1[mask1] = 0                         # pruned weights → 0 (kept for local Δ)
+            for i in range(count):
+                col_global = i1 + i
+                w  = W1[:, i]
+                m  = M1[:, i]
+                d  = R_diag[col_global]             # == sqrt(Ainv[ii])
 
-            # matrix R which holds the removed weights (pruned ones)
-            R = W1.clone()
-            R[~mask1] = 0                         # keep *only* the soon‑to‑be‑zeroed weights
+                # apply mask --------------------------------------------------
+                q        = w.clone()
+                q[mask1[:, i]] = 0
+                m[mask1[:, i]] = 0
+                Q1[:, i] = q
+                M1[:, i] = m
 
-            # accumulate per‑weight Mahalanobis loss for stats / debugging
-            Losses1 = ((W1 - Q1) ** 2) / denom    # element‑wise
+                denom_row = Sinv_d * Ainv_diag[col_global]
+                Losses1[:, i] = (w - q) ** 2 / denom_row
+
+                if disable_update:
+                    continue
+
+                r_vec = w - q                          # removed weights (rows)
+                u_vec = S.matmul(r_vec)                # Σ · r   (rows)
+
+                # --- update current block  (columns i … count‑1) ----------
+                a_row_block = Ainv[col_global, col_global:i2]
+                W1[:, i:] -= u_vec.unsqueeze(1) * a_row_block.unsqueeze(0)
+
+                Err1[:, i] = u_vec                     # cache for future cols
 
             if not disable_update:
-                # ΔW_block    =  - Σ · R · A_inv_block
-                # Σ  : (rows × rows)
-                # R  : (rows × count)
-                # A⁻¹_block  : (count × count)
-                A_inv_block   = A_inv[i1:i2, i1:i2]
-                Delta_block   = - Sigma.matmul(R).matmul(A_inv_block)
+                W[:, i1:i2] = Q1                       # commit pruned weights
 
-                # update within the current block  (note: keep zeros zero)
-                W1 += Delta_block
-                W1[mask1] = 0                     # enforce exact sparsity again
-
-                # update *future* columns  (i2:)
-                if i2 < self.columns:
-                    A_inv_future = A_inv[i1:i2, i2:]
-                    Delta_future = - Sigma.matmul(R).matmul(A_inv_future)   # rows × remaining
-                    W[:, i2:]   += Delta_future
-
-            # --------------------------------------------------------------
-            # 3.  Commit back to full weight / mask tensors
-            # --------------------------------------------------------------
-            W[:, i1:i2] = W1
             M[:, i1:i2] = M1
-
-            # accumulate loss if needed (kept for compatibility w/ print)
-            if i1 == 0:
-                Losses = torch.zeros(self.rows, device=self.dev)
             Losses += torch.sum(Losses1, 1) / 2
 
+            # propagate error to *future* columns ----------------------------
+            if not disable_update and i2 < self.columns:
+                A_future = Ainv[i1:i2, i2:]            # (count × remaining)
+                W[:, i2:] -= Err1.matmul(A_future)
+
         torch.cuda.synchronize()
-        print(f"time {time.time() - tick:.2f}s")
+        print(f"time {time.time() - tic:.2f}s")
         print("error", torch.sum(Losses).item())
 
-        # restore original layout for Conv1D -------------------------------
+        # restore layout for Conv1D -----------------------------------------
         if isinstance(self.layer, transformers.Conv1D):
             W = W.t()
 
-        # write back to the module  (mask & possibly new weights) ----------
         self.layer.mask.data = M.to(dtype=self.layer.weight.dtype)
         if not disable_update:
             self.layer.weight.data = W.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
 
     # ------------------------------------------------------------
-    # FREE RESOURCES EXPLICITLY
+    # FREE
     # ------------------------------------------------------------
     def free(self):
         if DEBUG:
-            self.inp1 = None
-            self.out1 = None
-        self.H = None
-        self.Sigma = None
+            self.inp1 = self.out1 = None
+        self.H = self.Sigma = None
         torch.cuda.empty_cache()
+
